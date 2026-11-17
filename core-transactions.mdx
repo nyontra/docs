@@ -1,0 +1,125 @@
+---
+title: Transactions
+slug: core-transactions
+---
+
+# Transactions
+
+This page covers the full lifecycle of a Nyontra transaction, from building the
+payload to confirming it on the core node. Everything goes through the gateway
+(`https://api.nyontra.com`); you never send a raw POST to the core node directly.
+
+## Transaction types
+
+Nyontra supports three base transaction types. Each type has a fixed shape
+(`TxInput`) and a canonical message format for signing.
+
+| Type | Payload shape | Used for |
+|---|---|---|
+| `TRANSFER` | `{ to, amount }` | Move tokens from one address to another. |
+| `UPDATE_NAME` | `{ payload }` | Change the display name on the sender’s account. |
+| `SET_PERMISSIONS` | `{ payload }` | Grant or revoke a permission bitmask on an account. |
+
+## Transaction input (`TxInput`)
+
+All types share the same wrapper fields:
+
+```ts
+type TxInput = {
+  /** One of TX_TYPES. Governance types (e.g. PROPOSE_MINT) use the default signer format. */
+  type: string;
+  /** Sender address. Defaults to the signing account's address. */
+  from?: string;
+  /** Recipient (required for TRANSFER; set to sender for UPDATE_NAME). */
+  to?: string;
+  /** Amount (required for TRANSFER). */
+  amount?: number | string;
+  /** Free‑form string payload. Required for UPDATE_NAME and SET_PERMISSIONS. */
+  payload?: string;
+  /** Next account nonce. Must match the account’s current counter. */
+  nonce: number;
+  /** Optional developer memo/metadata (any JSON value, ≤ 256 chars canonical). */
+  data?: unknown;
+};
+```
+
+## Building a transaction
+
+The SDK helper `buildTransferTx` gives you a `TxInput` ready for signing:
+
+```ts
+import { buildTransferTx } from '@nyontra/sdk';
+
+const input = buildTransferTx({
+  to: '0x0000000000000000000000000000000000000001',
+  amount: 100,
+  nonce: 7,
+});
+// input now has type: "TRANSFER", from, to, amount, nonce set.
+```
+
+For UPDATE_NAME or SET_PERMISSIONS, construct the `TxInput` manually or adapt
+`buildTransferTx`, filling in `payload` and setting `type` accordingly.
+
+## Signing
+
+Use the SDK's `signTx` or call the low‑level `buildSignMessage` + `Account.signMessage`:
+
+```ts
+import { Account, signTx } from '@nyontra/sdk';
+
+const signedTx = await signTx(account, input);
+// signedTx contains { type, from, to, amount, payload, data, nonce, signature, timestamp }
+```
+
+The `signature` field is what the core node verifies. It covers **only** the
+canonical message — not the JSON body. So the wire format can differ from the
+signed message, but every signed value must appear in the message exactly as sent.
+
+## Broadcast
+
+After signing, send the `SignedTx` to the gateway:
+
+```ts
+import { NyontraClient } from '@nyontra/sdk';
+
+const client = new NyontraClient({ apiKey: 'nyon_sk_...' });
+const result = await client.broadcast(signedTx);
+// result: { id, hash, replication?, idempotent? }
+```
+
+The gateway proxies the request to `POST /core/v1/tx/broadcast` on the core node.
+A successful broadcast returns `{ id, hash, replication, idempotent? }`. The
+`idempotent` flag is `true` when the same `(sender, nonce)` pair has already been
+committed — the core node guarantees idempotency for writes.
+
+## Confirmation & status
+
+Once broadcast, check the status:
+
+```ts
+const status = await client.getTxStatus(txHash);
+// status: { hash, status: "confirmed" | "not_found", data? }
+```
+
+If `status` is `"confirmed"`, the core node has applied the transaction and the
+block’s replication data is included (`TxLog.replication`).
+
+## Nonce rules
+
+- The nonce is an **account‑wide, monotonically incrementing counter**.
+- Read it with `GET /core/v1/account/:address` (via SDK: `client.getAccount(address).nonce`).
+- Each accepted transaction increments the nonce by **exactly one**.
+- **No gaps**: even failed transactions that were rejected still count if the core
+  node accepted them (the gateway may retry automatically).
+- If you submit the same `(sender, nonce)` twice, the core node treats the second
+  as **idempotent** and returns the same `(id, hash)`.
+- If the nonce no longer matches (a concurrent tx consumed it), you get a 403
+  nonce mismatch — refetch the nonce and resend. The SDK does **not** retry for
+  you.
+
+---
+
+**TL;DR**: Build → sign → broadcast → check status. The gateway handles nonce
+validation and idempotency; you only need to read the nonce once per transaction
+and pass it through.

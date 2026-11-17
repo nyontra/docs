@@ -1,0 +1,55 @@
+---
+title: Authentication
+slug: authentication
+---
+
+# Authentication
+
+There are two independent authentication mechanisms. Do not conflate them: an API
+key identifies your project, while a wallet signature authorizes a transaction.
+
+## API keys (`x-api-key`)
+
+API keys are issued by the Developer Portal for a project and are sent as the
+`x-api-key` header on **rate‑limited, project‑scoped** gateway requests.
+(Not every route needs one — session routes and public proxy routes use different
+auth, as described in the API Reference.)
+
+### Getting a key
+
+1. Open the Developer Portal and connect your wallet.
+2. Sign the login message (`Nyontra Login: <your-address>`) — this proves you own
+   the wallet without sending any private key.
+3. Create a project. The portal returns a raw key exactly once, prefixed `nyon_sk_`.
+4. Store it as a secret. The portal only shows a truncated prefix afterwards.
+
+## Wallet signatures
+
+Transactions are signed locally by the sender. The signature is part of the
+transaction body and is verified by the core node. No API key is needed for the
+signature step itself.
+
+Certain gateway routes also require a session signature. Those requests carry two
+headers:
+
+| Header | Value |
+|---|---|
+| `x-nyontra-address` | Your wallet address |
+| `x-nyontra-signature` | `personal_sign` signature of `Nyontra Login: <address>` |
+
+## Key types at a glance
+
+> [!NOTE]
+> Never send a private key or seed phrase over HTTP. The gateway never asks for
+> one, and neither should any client you build.
+
+| Credential | Format | Where it is used |
+|---|---|---|
+| API key | `nyon_sk_...` | `x-api-key` on gateway requests |
+| Private key | 32-byte hex | Local signing only |
+| Session signature | EIP-191 signature | `x-nyontra-signature` for protected routes |
+
+## Next steps
+
+- [API Reference](api-endpoints.mdx)
+- [User Signatures](user-signatures.mdx)

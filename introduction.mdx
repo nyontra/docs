@@ -1,0 +1,40 @@
+---
+title: Introduction
+slug: introduction
+---
+
+# Introduction
+
+Nyontra is a permissioned, hash-chained ledger. It is built as three layers, each
+with a single job:
+
+| Layer | Host | Purpose |
+|---|---|---|
+| **Portal** (`portal/`) | Developer Portal (login + key issuance) | Frontend where developers sign in with a wallet and get an API key |
+| **API gateway** (`api/`) | `https://api.nyontra.com` | Public entry point: authenticates projects, applies rate limits, gates endpoints |
+| **Core node** (`core/`) | `https://core.nyontra.com` | The ledger itself. Internal only — no public access, no API keys |
+
+## How requests flow
+
+1. Your application calls `https://api.nyontra.com` with your `x-api-key`.
+2. The gateway validates the key, checks that the endpoint is exposed, applies the
+   endpoint's rate limit, and proxies the call to the core node.
+3. The core node validates the transaction signature and commits the change.
+4. The gateway returns the node response to you.
+
+The core node is never exposed to end users directly. It has no rate limits or API
+keys of its own — the gateway is the only supported path, and it decides which node
+endpoints are publicly available.
+
+## Writes are cryptographically authorized
+
+The API key identifies your **project**; it does not authorize transactions.
+Every write carries a signature produced locally by the sender's private key. The
+core node verifies that signature before applying the transaction, so a leaked API
+key can never move funds.
+
+## Next steps
+
+- [Get your API key](authentication.mdx)
+- [Browse the API reference](api-endpoints.mdx)
+- [Install the SDK](sdk.mdx)

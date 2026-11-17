@@ -1,0 +1,110 @@
+---
+title: User Signatures
+slug: user-signatures
+---
+
+# User Signatures
+
+The SDK uses EIP‑191 personal‑message signing (`personal_sign`). Every transaction
+sent to the gateway carries a signature produced by this method. The signature must
+byte‑for‑byte match what the core node reconstructs, otherwise the write is
+rejected with **403** ("signature verification failed").
+
+## Canonical message formats
+
+All addresses are lower‑cased. Messages are colon‑separated. The type of
+transaction determines which fields appear and their order.
+
+| Tx type | Message format | Notes |
+|---|---|---|
+| `UPDATE_NAME` | `{from}:{payload}:{nonce}:{data}` | `payload` is the new display name. `data` is optional memo JSON (sorted keys). |
+| `TRANSFER` / `SET_PERMISSIONS` | `{from}:{to}:{amount}:{nonce}:{data}` | `to` is lower‑cased. `amount` is the integer quantity. `data` is optional memo. |
+| default (governance family) | `{from}:{type}:{payload}:{nonce}:{data}` | Used for governance proposals (`PROPOSE_MINT`, `VOTE_PROPOSAL`, etc.). `type` is the proposal name. |
+
+### Example: Transfer
+
+Message: `0xabc...:0xdef...:100:42:""`
+
+- from = `0xabc...` (lowercased)
+- to = `0xdef...` (lowercased)
+- amount = `100`
+- nonce = `42`
+- data = `""` (absent, produces empty string)
+
+### Example: Update Name
+
+Message: `0xabc...:NewDisplayName:42:{"memo":"hello"}`
+
+- from = `0xabc...`
+- payload = `NewDisplayName`
+- nonce = `42`
+- data = `{"memo":"hello"}` → canonical JSON (sorted keys), hash‑chain compatible
+
+### Example: Governance (vote)
+
+Message: `0xabc...:PROPOSE_MINT:42:""`
+
+- from = `0xabc...`
+- type = `PROPOSE_MINT`
+- nonce = `42`
+- data = `""`
+
+## Signing with the SDK
+
+```ts
+import { Account } from '@nyontra/sdk';
+
+const account = Account.fromPrivateKey('0x...');
+
+const txInput = {
+  type: 'TRANSFER',
+  from: account.address,
+  to: '0x0000000000000000000000000000000000000001',
+  amount: 100,
+  nonce: (await client.getAccount(account.address)).nonce,
+};
+
+const signedTx = await client.signTx(account, txInput);
+// signedTx.signature is the EIP‑191 signature
+```
+
+The SDK internally calls `account.signMessage(buildSignMessage(txInput))`. The
+resulting signature is what the core node expects.
+
+## Security rules
+
+| Rule | Reason |
+|---|---|
+| **Never share your private key** | The key is only used locally to produce signatures; it never leaves your process. |
+| **Sign locally** | Use `Account.signMessage` or `client.signTx` — do not roll your own signing. |
+| **Verify message format** | Each tx type has a fixed field order; swap a single field and the core node rejects it. |
+| **Keep addresses lowercased** | The core node lowercases before comparison; inconsistent casing causes 403. |
+| **Nonce must be exact** | The nonce you read from `GET /core/v1/account/:address` must match the account's current counter; otherwise the core rejects with 403. |
+
+## Verifying a signature locally
+
+```ts
+import { verifyMessage } from 'ethers';
+import { buildSignMessage } from '@nyontra/sdk';
+
+const message = buildSignMessage({
+  type: 'TRANSFER',
+  from: '0xabc',
+  to: '0xdef',
+  amount: 100,
+  nonce: 42,
+  data: null,
+});
+
+// ethers.verifyMessage handles EIP-191 prefixing automatically
+const isValid = verifyMessage(message, signature);
+```
+
+If `isValid` is `true`, the signature was produced by the private key that owns
+the address `0xabc`, and the core node will accept the transaction.
+
+## Where to next
+
+- [Transactions](core-transactions.mdx) – nonce lifecycle and broadcast flow.
+- [Error Handling](error-handling.mdx) – what happens when signature verification fails.
+- [SDK Guide](sdk.mdx) – concrete `signTx` example.

@@ -1,0 +1,79 @@
+---
+title: Updating Account Name
+slug: updating-account-name
+---
+
+# Updating Account Name
+
+Nyontra lets you set or change the display name associated with your account.
+The name is stored in the account state and returned by `GET /core/v1/account/:address`.
+
+## The `UPDATE_NAME` transaction
+
+Use the `UPDATE_NAME` transaction type to set a new display name. The transaction
+payload is simply the new name string. The canonical message format for signing is:
+
+```
+{from}:{payload}:{nonce}:{data}
+```
+
+- `from` = your account address (lowercased)
+- `payload` = the new display name string
+- `nonce` = the account’s current nonce (read via `client.getAccount(address).nonce`)
+- `data` = optional memo (absent → `""`)
+
+## Example: change your display name
+
+```ts
+import { Account, NyontraClient } from '@nyontra/sdk';
+
+const client = new NyontraClient({ apiKey: 'nyon_sk_...' });
+const account = Account.fromPrivateKey('0x...');
+
+// 1. Read the current nonce
+const { nonce } = await client.getAccount(account.address);
+
+// 2. Build and sign the UPDATE_NAME transaction
+const signedTx = await client.signTx(account, {
+  type: 'UPDATE_NAME',
+  from: account.address,
+  payload: 'My New Display Name',   // any string you want
+  nonce,
+});
+
+// 3. Broadcast it to the gateway
+const result = await client.broadcast(signedTx);
+// result: { id, hash, replication?, idempotent? }
+```
+
+After the transaction is confirmed, your new name appears in:
+
+```http
+GET /api/blockchain/account/0x...
+```
+
+or via the SDK:
+
+```ts
+const info = await client.getAccount(account.address);
+console.log(info.name); // "My New Display Name"
+```
+
+## Common pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| **Nonce too low** (another tx already consumed it) | Re‑read the nonce and resend. The SDK does not retry for you. |
+| **Payload contains characters that break the canonical message** | Keep the payload plain UTF‑8; the SDK’s `canonicalData` serializes any JSON data, but the name itself is a simple string. |
+| **Sending the same nonce twice without idempotency** | The core node treats the second as a distinct transaction; you’ll get a new hash but the nonce will increment. |
+| **Forgetting to sign** | The core node rejects unsigned `UPDATE_NAME` transactions with 403. Use `client.signTx`. |
+
+## Where to next
+
+- [Transactions](core-transactions.mdx) – full lifecycle of build → sign → broadcast → confirm.
+- [Wallets](core-wallets.mdx) – creating and managing accounts.
+- [Error Handling](error-handling.mdx) – what 403/409 responses mean.
+
+---
+
+**Summary**: UPDATE_NAME payload = new display name. Message = `{from}:{payload}:{nonce}:{data}`. Read nonce, sign, broadcast. The name updates on the next `getAccount` call.

@@ -1,0 +1,48 @@
+---
+title: Nyontra Developer Docs
+slug: index
+---
+
+# Nyontra Developer Docs
+
+Nyontra is a permissioned, hash-chained ledger with a public API layer. Applications
+reach the network through the **API gateway at `https://api.nyontra.com`**, which
+authenticates projects, applies rate limits, and proxies requests to the core node.
+The core node itself (`core.nyontra.com`) is internal and not for direct use.
+
+## What you need
+
+1. A wallet — secure any secp256k1 keypair or seed phrase.
+2. An API key — sign in to the Developer Portal with your wallet, create a project,
+   and copy the generated `x-api-key`.
+3. The JavaScript SDK — `npm install @nyontra/sdk ethers`.
+
+## Quick start
+
+1. Go to the Developer Portal and sign in by signing a message with your wallet.
+2. Create a project. The portal issues an API key (`nyon_sk_...`).
+3. Install the SDK: `npm install @nyontra/sdk ethers`
+4. Create an account and send a transfer — see [SDK Guide](sdk.mdx).
+5. Handle failures with the [Error Handling](error-handling.mdx) guide.
+
+## Documentation
+
+| Page | What's inside |
+|---|---|
+| [Introduction](introduction.mdx) | How the portal, gateway, and core node fit together |
+| [Authentication](authentication.mdx) | API keys, session signatures, and when each is required |
+| [API Reference](api-endpoints.mdx) | Every public gateway endpoint |
+| [SDK Guide](sdk.mdx) | Installing and using `@nyontra/sdk` |
+| [User Signatures](user-signatures.mdx) | Canonical messages and local signing |
+| [Transactions](core-transactions.mdx) | Transaction lifecycle, nonces, and idempotency |
+| [Wallets](core-wallets.mdx) | Accounts, key management, and account state |
+| [Updating Account Name](updating-account-name.mdx) | Claiming or changing your display name |
+| [Error Handling](error-handling.mdx) | Status codes and SDK errors |
+| [HTTP Headers](headers.mdx) | Headers the gateway accepts |
+
+---
+
+All developer traffic goes through `https://api.nyontra.com`. The gateway applies
+rate limits, gates which node endpoints are public, and requires an API key for
+project-scoped routes. Writes are authorized by the transaction signature itself,
+so private keys never leave your application.

@@ -1,0 +1,121 @@
+---
+title: SDK Guide
+slug: sdk
+---
+
+# SDK Guide
+
+The official Nyontra SDK (`@nyontra/sdk`) lets you build applications without
+needling with low‑level HTTP calls. It handles account management, canonical
+transaction signing, and the gateway communication for you.
+
+## Installation
+
+```bash
+npm install @nyontra/sdk ethers
+```
+
+## Core exports
+
+| Export | Description |
+|---|---|
+| `Account` | Class for secp256k1 keypairs; supports `generate`, `fromPrivateKey`, `fromMnemonic`, `signMessage`, and `export`. |
+| `Keypair` | Plain‑object form of an account (`address`, `privateKey`, optional `mnemonic`). |
+| `NyontraClient` | HTTP client that talks to `https://api.nyontra.com`. |
+| `NyontraApiError` | Thrown on any non‑2xx response from the gateway. |
+| `TxLog`, `AccountJson`, `BlockInfo`, `BroadcastResponse`, `Replication` | Shape types for data returned by the gateway. |
+
+## Creating an account
+
+```ts
+import { Account } from '@nyontra/sdk';
+
+// Generate a new random wallet (back up the mnemonic!)
+const account = Account.generate();
+console.log(account.address); // "0x..."
+
+// Import from a raw private key (0x prefixed or bare)
+const imported = Account.fromPrivateKey('0x...');
+
+// Import from a BIP‑39 mnemonic
+const fromMnemonic = Account.fromMnemonic('word1 word2 ...');
+
+// Sign an arbitrary message (EIP‑191 personal sign)
+const sig = await account.signMessage('Hello, Nyontra!');
+```
+
+## Using the NyontraClient
+
+The client talks to the public gateway (`https://api.nyontra.com`). You can
+override the URL in development, but the default is the production endpoint.
+
+```ts
+import { NyontraClient } from '@nyontra/sdk';
+
+const client = new NyontraClient({
+  // optional: use a different base URL for testing
+  gatewayUrl: 'https://api.nyontra.com',
+  // optional: API key for project‑scoped routes (portal → Create Project)
+  apiKey: 'nyon_sk_...',
+  // optional: address used for X-Nyontra-Requester on history queries
+  requester: '0x...',
+});
+```
+
+### Core methods
+
+| Method | Purpose | Returns |
+|---|---|---|
+| `getHealth()` | GET `/core/v1/health` | `{ status: 'ok' }` (or throws) |
+| `getBlockCurrent()` | GET `/core/v1/block/current` | `BlockInfo` |
+| `getAccount(address)` | GET `/core/v1/account/:address` | `AccountJson` |
+| `getBalance(address)` | Alias for `getAccount` → `.balance` |
+| `getNonce(address)` | Alias for `getAccount` → `.nonce` |
+| `getTxStatus(hash)` | GET `/core/v1/tx/status/:hash` | `{ hash, status, data? }` |
+| `getHistory(address, opts)` | GET `/core/v1/history/:address` | `TxLog[]` (optionally limited, `as` requester) |
+| `broadcast(signedTx)` | POST `/core/v1/tx/broadcast` | `BroadcastResponse` |
+| `transfer(account, input)` | High‑level flow: fetch nonce, sign, broadcast | `BroadcastResponse` |
+
+### Helper functions
+
+- `signTx(account, txInput)` – sign a transaction input locally.
+- `buildTransferTx(input)` – construct a TRANSFER `TxInput`.
+- `canonicalData(value)` – deterministic JSON for the optional `data` field.
+- `TX_TYPES` – `['TRANSFER', 'UPDATE_NAME', 'SET_PERMISSIONS']`.
+
+## Example: a transfer
+
+```ts
+import { Account, NyontraClient } from '@nyontra/sdk';
+
+// 1. Create an account
+const account = Account.generate();
+
+// 2. Instantiate the client (project API key optional for transfers)
+const client = new NyontraClient({
+  gatewayUrl: 'https://api.nyontra.com',
+  apiKey: 'nyon_sk_...',
+});
+
+// 3. Perform a transfer
+const result = await client.transfer(account, {
+  to: '0x0000000000000000000000000000000000000000',
+  amount: 100, // tokens or currency unit used by the network
+});
+
+console.log('Transaction ID:', result.hash);
+```
+
+## Error handling
+
+Most SDK errors surface as `NyontraApiError`. Use the [Error Handling](error-handling.mdx) page for a complete status‑code matrix and tips.
+
+## Where to next
+
+- [User Signatures](user-signatures.mdx) – canonical message format used by `signTx`.
+- [Transactions](core-transactions.mdx) – nonce rules and idempotency.
+- [Updating Account Name](updating-account-name.mdx) – how to claim a display name.
+
+---
+
+**Note:** The SDK is built for `api.nyontra.com`. It never talks to the internal core node directly. If you need raw core access (rare), you can proxy it yourself with `axios` and the headers described in the [HTTP Headers](headers.mdx) page.

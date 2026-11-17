@@ -1,0 +1,109 @@
+---
+title: API Reference
+slug: api-endpoints
+---
+
+# API Reference
+
+All public interactions with Nyontra use the gateway at `https://api.nyontra.com`.
+The gateway authenticates projects with an `x-api-key` header, applies rate limits,
+and then proxies requests to the core node (`core.nyontra.com`). The core node is
+internal-only; you never need to hit it directly.
+
+## Core proxy routes
+
+These routes are public — they require **no session, no API key, and no
+signature headers**. They proxy directly to the core node (`core.nyontra.com`),
+so they always reflect live chain state.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/blockchain/account/{address}` | Proxy for `GET /core/v1/account/{address}`. Returns account info (address, name, balance, permissions, nonce). |
+| `POST` | `/api/blockchain/tx/broadcast` | Proxy for `POST /core/v1/tx/broadcast`. Accepts the signed transaction JSON and returns `{ id, hash, replication, idempotent? }`. |
+
+## Dashboard (session‑authenticated) routes
+
+These routes require a **wallet session** — the caller must sign in via the
+Developer Portal so that `x-nyontra-address` and `x-nyontra-signature` headers
+accompany each request. They do **not** use `x-api-key`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/me` | Returns the signed‑in user (address, admin flag, etc.). |
+| `GET` | `/api/projects` | Lists projects you own or collaborate on. Includes collaborators and API keys (masked). |
+| `POST` | `/api/projects` | Creates a new project. Returns `{ project_id, project_name, api_key }`. The API key is shown only once. |
+| `PATCH` | `/api/projects/{id}` | Updates project name or regenerates its API key. Requires `edit` permission. |
+| `DELETE` | `/api/projects/{id}` | Deletes the project. Only the owner can delete. |
+| `POST` | `/api/projects/{id}/collaborators` | Adds a collaborator (wallet address) with a permission (`view_all_history`, `api`, etc.). Requires `edit` permission. |
+| `DELETE` | `/api/projects/{id}/collaborators/{wallet}` | Removes a collaborator. Requires `edit` permission. |
+| `PATCH` | `/api/api-keys/{id}` | Renames an API key (label). Must belong to a project you own or be an `edit` collaborator. |
+
+## Admin routes
+
+These routes require the `hasApiPerm` flag on the user (`isAdmin`) in addition to a
+valid session.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/portal/admin/projects` | List all projects, with masked API keys. |
+| `GET` | `/api/portal/admin/settings` | The current gateway configuration (core worker URL, maintenance flags, endpoint list). |
+| `POST` | `/api/portal/admin/settings` | Update `gateway_config` and the `endpoints` table (used to expose or hide core routes). |
+| `GET` | `/api/portal/admin/target-endpoints` | Returns the current core worker’s route registry (`/internal/routes`). |
+
+## Dynamic gateway routes
+
+`/api/:category/:version/:path(*)`
+
+If you need to expose a core route under a custom prefix, you can do it via the
+admin panel. The gateway then forwards the request to the matching core route,
+applying any `requires_api_key` or `requires_signature` checks defined in the
+manifest.
+
+**Important:** The gateway never exposes `/core/v1/*` directly; all core routes
+appear under the manifest’s configured path.
+
+## Internal core routes (not for direct use)
+
+The core node implements a set of internal REST endpoints. They are referenced in
+the gateway manifest but are not publicly reachable without a proxy. For reference,
+they are:
+
+| HTTP | Path | Purpose |
+|---|---|---|
+| `GET` | `/core/v1/account/:address` | Account info (used by `/api/blockchain/account/:address`) |
+| `GET` | `/core/v1/balance/:address` | Current balance |
+| `GET` | `/core/v1/tx/status/:hash` | Transaction confirmation status |
+| `GET` | `/core/v1/block/current` | Current block height & hash |
+| `GET` | `/core/v1/block/:identifier` | Block details by height or hash |
+| `GET` | `/core/v1/history/:address` | Transaction history (requires `X-Nyontra-Requester`) |
+| `GET` | `/core/v1/history/all` | Full history (admin only) |
+| `GET` | `/core/v1/explorer/address/:address` | Explorer‑friendly history listing |
+| `GET` | `/core/v1/address/validate/:address` | Quick address validity check |
+| `GET` | `/core/v1/roles` | List of role permission bitmasks |
+| `GET` | `/core/v1/health` | Simple liveness probe |
+| `POST` | `/core/v1/tx/broadcast` | Submit a signed transaction (used by `/api/blockchain/tx/broadcast`) |
+| `POST` | `/core/v1/transfer` | High‑level helper for a transfer (signed locally) |
+| `POST` | `/core/v1/bulk/transfer` | Batch of transfers (signed locally) |
+| `GET` | `/core/v1/governance/proposals/pending` | Governance proposals awaiting votes |
+| `GET` | `/core/v1/governance/proposals/active` | Active proposals |
+| `GET` | `/core/v1/governance/proposals/all` | All historical proposals |
+| `GET` | `/core/v1/governance/proposals/:id` | Details of a specific proposal |
+
+> [!NOTE]
+> These routes live on the internal core node (`core.nyontra.com`). The gateway
+> proxies them but never advertises them directly to users.
+
+## Calling the API
+
+- **Public proxy routes** (`/api/blockchain/*`) need nothing beyond the request body.
+- **Dashboard routes** (`/api/me`, `/api/projects/*`, `/api/api-keys/*`) need the
+  session headers `x-nyontra-address` + `x-nyontra-signature` from the portal login.
+- **Admin routes** (`/api/portal/admin/*`) need a session whose account has the
+  `API` permission bit (8) set.
+- **Dynamic routes** (`/api/:category/:version/:path`) apply whatever the manifest
+  declares (`requires_api_key`, `requires_signature`, or neither).
+- **Never** call `core.nyontra.com/core/v1/*` directly — it is internal and
+  intentionally unauthenticated.
+
+Full header reference: [HTTP Headers](headers.mdx). Common failure modes:
+[Error Handling](error-handling.mdx).

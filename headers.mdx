@@ -1,0 +1,51 @@
+---
+title: HTTP Headers
+slug: headers
+---
+
+# HTTP Headers
+
+The Nyontra gateway (`https://api.nyontra.com`) uses a small set of custom headers
+for authentication, routing, and auditing. These are the only headers the SDK or your
+own HTTP calls need to set (besides standard ones like `Content-Type`).
+
+## Header reference
+
+| Header | Example | Purpose |
+|---|---|---|
+| `x-api-key` | `nyon_sk_abcdef...` | Identifies the project in the gateway and selects its rate limit. |
+| `x-nyontra-requester` | `0x123...` | For read‑only endpoints that require a permissioned address (e.g., `history`). The gateway forwards this to the core node as the same header. |
+| `x-nyontra-address` | `0xabc...` | Part of the admin session. Must match the wallet that signed the `x-nyontra-signature`. |
+| `x-nyontra-signature` | `0x...` *(hex signature)* | EIP‑191 personal sign of `Nyontra Login: <address>` obtained from the portal. Used for admin routes (`/api/portal/admin/*`). |
+| `Content-Type` | `application/json` | Required for request bodies. |
+
+## How they are used
+
+- **`x-api-key`** – Every request to the gateway includes it (unless the endpoint is explicitly public without a key). The gateway looks up the project and applies its rate limit.
+- **`x-nyontra-requester`** – Sent on reads (e.g. `/core/v1/history/:address`) when the endpoint requires a requester with `VIEW_ALL_HISTORY` permission. The core node checks the permission.
+- **`x-nyontra-address` + `x-nyontra-signature`** – Used for admin routes (`/api/portal/admin/*`). The signature proves you own the address that has admin rights in the portal.
+- **No other custom headers** are needed. The gateway also accepts standard CORS headers (origin `*`).
+
+## Example request (SDK generated)
+
+```http
+POST /api/blockchain/tx/broadcast HTTP/1.1
+Host: api.nyontra.com
+x-api-key: nyon_sk_...
+Content-Type: application/json
+
+{
+  "type": "TRANSFER",
+  "from": "0xabc...",
+  "to": "0xdef...",
+  "amount": 100,
+  "nonce": 5,
+  "data": null,
+  "signature": "0x...",
+  "timestamp": 1700000000
+}
+```
+
+---
+
+**Note:** Do not hard‑code headers in your own HTTP calls unless you are using the gateway’s dynamic router (`/api/:category/:version/:path`). For normal SDK usage, all required headers are set internally.

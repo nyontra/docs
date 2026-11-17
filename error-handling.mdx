@@ -1,0 +1,78 @@
+---
+title: Error Handling
+slug: error-handling
+---
+
+# Error Handling
+
+The gateway (`https://api.nyontra.com`) returns HTTP status codes that you can
+parse via the SDK (`NyontraApiError`) or by handling raw responses yourself. This
+guide lists the most common codes and what they mean.
+
+## Status‑code reference
+
+| Code | Situation | Description |
+|---|---|---|
+| **400** | Invalid transaction format / bad request | The gateway rejected the payload (e.g., missing `to`, non‑integer `amount`). Look at the `error.body` for details. |
+| **401** | Missing or invalid `x-api-key` | The key you sent is not recognized or inactive. Verify the key from the portal. |
+| **401** | Missing or invalid session signature (`x-nyontra-signature`) | Used for admin routes; ensure you have logged in via the portal and stored `x-nyontra-address` + `x-nyontra-signature`. |
+| **403** | Permission denied (nonce mismatch, insufficient balance, unauthorized) | `403` from the gateway often means the core node rejected the write (e.g., a concurrent transaction took the nonce slot). Fetch a fresh nonce with `client.getNonce()` and resend — the SDK does not retry for you. |
+| **404** | Resource not found (e.g., `/api/projects/123`) | Check the ID format or ensure you have permission to access the resource. |
+| **409** | Conflict (duplicate project name, existing collaborator) | The operation cannot be performed because the data already exists. Retry with a different name or remove the collaborator. |
+| **422** | Payload validation failure (e.g., `data` > 256 chars) | Used for validation errors (e.g., `data` exceeds MAX_DATA_CANONICAL_LENGTH). |
+| **429** | Rate limit exceeded (gateway‑level) | The endpoint’s configured limit was exceeded. Wait or use a lower‑limit endpoint. |
+| **502** | Blockchain node unreachable | The core worker is down or the proxy failed. Check maintenance status or try again later. |
+| **503** | Infrastructure sync failed | The gateway cannot reach the core worker’s route registry (`/internal/routes`). Retry after a few seconds. |
+
+> [!NOTE]
+> The SDK throws `NyontraApiError` for any non‑2xx response. The `status` field on the error matches the HTTP code; `body` contains the JSON (or plain text) returned by the gateway.
+
+## Common error scenarios
+
+### Nonce mismatch (403)
+
+If you submit two identical transfers from the same account, the first one wins. The second request returns 403 with `error: "nonce mismatch"`. The SDK (`transfer`) catches this and retries with the fresh nonce.
+
+### Insufficient balance (403)
+
+The `balance` field is the amount available to spend. If a transfer exceeds it, the gateway returns 403. Check `balance` before spending.
+
+### Invalid signature (401/403)
+
+Signature verification happens on the core node. If your local `signTx` does not match the core’s expectations (e.g., wrong canonical message format), you’ll get a 403. Review the [User Signatures](user-signatures.mdx) guide.
+
+### Rate limiting (429)
+
+Only the gateway can return 429. Each endpoint in the `endpoints` table has its own limit (default 100). The SDK does not automatically throttle; back off and retry.
+
+## Using the SDK safely
+
+```ts
+import { NyontraClient, NyontraApiError } from '@nyontra/sdk';
+
+const client = new NyontraClient({
+  apiKey: 'nyon_sk_...',
+});
+
+try {
+  const result = await client.transfer(account, { to: '...', amount: 10 });
+  console.log('Success:', result.hash);
+} catch (e) {
+  if (e instanceof NyontraApiError) {
+    console.error('Gateway error', e.status, e.body);
+    // 403 nonce mismatch → SDK already retries, but you can inspect e.body for details
+  } else {
+    console.error('Unexpected error', e);
+  }
+}
+```
+
+## Where to next
+
+- [SDK Guide](sdk.mdx) – concrete examples.
+- [User Signatures](user-signatures.mdx) – canonical message format.
+- [Transactions](core-transactions.mdx) – nonce behavior.
+
+---
+
+**TL;DR:** The gateway is your first line of defense. Use the SDK for most work; handle `NyontraApiError` to act on status‑specific issues.

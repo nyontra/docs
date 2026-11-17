@@ -1,0 +1,93 @@
+---
+title: Wallets
+slug: core-wallets
+---
+
+# Wallets & Accounts
+
+A Nyontra **account** is a secp256k1 keypair (EIP‑55 checksummed address). This
+page explains how to create, manage, and query accounts using the SDK or raw HTTP.
+
+## Creating an account
+
+```ts
+import { Account } from '@nyontra/sdk';
+
+// 1. Generate a fresh random wallet (back up the mnemonic!)
+const acct = Account.generate();
+// → acct.address  (checksummed)
+// → acct.privateKey (0x‑prefixed, keep secret!)
+// → acct.mnemonic (BIP‑39 phrase)
+
+// 2. Import an existing wallet
+const fromKey = Account.fromPrivateKey('0x...');
+// or from a mnemonic
+const fromMnemo = Account.fromMnemonic('word1 word2 word3');
+
+// 3. Export the key material (for backup or migration)
+const kp = acct.export();
+// kp = { address: '0x...', privateKey: '0x...', mnemonic?: '...' }
+```
+
+## Account state on the ledger
+
+When you send a transaction, the core node records state changes under the
+address. The account JSON (fetched via `GET /core/v1/account/:address`) contains:
+
+| Field | Meaning |
+|---|---|
+| `address` | The checksummed address (case‑insensitive to core). |
+| `name` | Your display name (set via `UPDATE_NAME`). Initially `null`. |
+| `balance` | Available funds (token units). |
+| `permissions` | Bitmask: MANAGE_ROLES=1, MINT=2, SET_PRICE=4, API=8, ESCROW_SIGN=16, VIEW_ALL_HISTORY=64, VALIDATOR=256. |
+| `nonce` | Current account nonce — increments by 1 for each accepted tx. |
+| `history` | Array of `TxLog` entries (transactions that affected this account). |
+
+You can read this state via the SDK:
+
+```ts
+import { NyontraClient } from '@nyontra/sdk';
+
+const client = new NyontraClient({ apiKey: 'nyon_sk_...' });
+const acctInfo = await client.getAccount('0x...');
+console.log(acctInfo.balance, acctInfo.permissions, acctInfo.nonce);
+```
+
+## Address validation
+
+Before sending funds, it’s good practice to verify the destination format:
+
+```ts
+// The SDK regex: /^0x[0-9a-fA-F]{40}$/
+const isValid = /^0x[0-9a-fA-F]{40}$/.test(addr);
+```
+
+The core node also provides a quick check (`GET /core/v1/address/validate/:address`)
+but the SDK does not expose it directly — you can call the gateway proxy:
+
+```http
+GET /api/blockchain/account/0xabc...
+```
+
+or use a custom fetch.
+
+## Key management best practices
+
+| Practice | Why |
+|---|---|
+| **Back up your mnemonic** (or private key) immediately after generation. | The mnemonic is the only recovery path; there is no “reset password”. |
+| **Never store the private key in source control or logs.** | The key never leaves your process for signing; if exposed, funds are at risk. |
+| **Use `Account.generate()` for new wallets** — it creates a fresh random keypair. | Guarantees entropy from a CSPRNG. |
+| **Import carefully** — `fromPrivateKey` and `fromMnemonic` accept `0x`‑prefixed or bare strings; trim whitespace. | Prevents accidental double‑prefix errors. |
+| **Rotate API keys** from the portal if you suspect compromise. | API keys identify projects, not accounts; they can be regenerated without affecting your wallet. |
+
+## Where to next
+
+- [Transactions](core-transactions.mdx) – build, sign, and broadcast.
+- [Updating Account Name](updating-account-name.mdx) – change the `name` field.
+- [User Signatures](user-signatures.mdx) – canonical messages and signing rules.
+
+---
+
+**Note:** The account is your identity on Nyontra. It is **not** the same as an API key
+or a project. Each concept has its own scope and management path.
