@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Nyontra Wallet Docs",
-  "description": "Documentation for Nyontra Wallet — core ledger, SDK, API, and guides.",
+  "name": "Nyontra Docs",
+  "description": "Documentation for Nyontra ledger, SDK, API, and guides.",
   "theme": "mint",
   "colors": {
     "primary": "#0D9373",
@@ -17,5 +17,13 @@
       { "group": "Core", "pages": ["core-transactions", "core-wallets"] },
       { "group": "Guides", "pages": ["error-handling", "headers", "updating-account-name", "user-signatures"] }
     ]
+  },
+  "logo": {
+    "light": "/images/nyontra.favicon.png",
+    "dark": "/images/nyontra.favicon.png"
+  },
+  "favicon": {
+    "light": "/images/nyontra.favicon.png",
+    "dark": "/images/nyontra.favicon.png"
   }
 }
